@@ -204,8 +204,8 @@ def SetCentrePUV(space):
     space.u_c=space.u[1:-1,1:-1]
     space.v_c=space.v[1:-1,1:-1]
     
-def WriteToFile(space,iteration):
-    if(iteration%10==0):
+def WriteToFile(space,iteration,interval):
+    if(iteration%interval==0):
         cwdir=os.getcwd()
         if(iteration==0):
             if(os.path.isdir("Result")==False):
