@@ -211,8 +211,10 @@ def WriteToFile(space,iteration):
             if(os.path.isdir("Result")==False):
                 os.mkdir("Result")
                 os.chdir("Result")
+                cwdir=os.getcwd()
             elif(os.path.isdir("Result")==True):
                 os.chdir("Result")
+                cwdir=os.getcwd()
                 filelist=os.listdir()
                 for file in filelist:
                     os.remove(file)
