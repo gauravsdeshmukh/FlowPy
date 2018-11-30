@@ -30,6 +30,8 @@ class Space:
         self.v=sci.zeros((self.rowpts+2,self.colpts+2))
         self.p=sci.zeros((self.rowpts+2,self.colpts+2))
         self.r=sci.zeros((self.rowpts+2,self.colpts+2))
+        self.u_star=sci.zeros((self.rowpts+2,self.colpts+2))
+        self.v_star=sci.zeros((self.rowpts+2,self.colpts+2))
         self.SetEmptyMesh()
         
     def SetDeltas(self,breadth,length):
@@ -129,12 +131,46 @@ def SetTimeStep(CFL,space,fluid):
     dt_min=min(dt_hyper,dt_para)
     space.dt=dt_min
  
-@nb.jit    
-def SolvePressurePoisson(space,fluid,left,right,top,bottom):
+def GetStarredVelocities(space,fluid):
     rows=int(space.rowpts)
     cols=int(space.colpts)
     u=space.u.astype(float)
     v=space.v.astype(float)
+    u_star=space.u_star.astype(float)
+    v_star=space.v_star.astype(float)
+    dx=float(space.dx)
+    dy=float(space.dy)
+    dt=float(space.dt)
+    rho=float(fluid.rho)
+    mu=float(fluid.mu)
+    
+    u_star=u.copy()
+    v_star=v.copy()
+    
+    u1_y=(u[2:,1:cols+1]-u[0:rows,1:cols+1])/(2*dy)
+    u1_x=(u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx)
+    u2_y=(u[2:,1:cols+1]-2*u[1:rows+1,1:cols+1]+u[0:rows,1:cols+1])/(dy**2)
+    u2_x=(u[1:rows+1,2:]-2*u[1:rows+1,1:cols+1]+u[1:rows+1,0:cols])/(dx**2)
+    v_face=(v[1:rows+1,1:cols+1]+v[1:rows+1,0:cols]+v[2:,1:cols+1]+v[2:,0:cols])/4
+    u_star[1:rows+1,1:cols+1]=u[1:rows+1,1:cols+1]-dt*(u[1:rows+1,1:cols+1]*u1_x+v_face*u1_y)+(dt*(mu/rho)*(u2_x+u2_y))   
+
+    v1_y=(v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy)
+    v1_x=(v[1:rows+1,2:]-v[1:rows+1,0:cols])/(2*dx)
+    v2_y=(v[2:,1:cols+1]-2*v[1:rows+1,1:cols+1]+v[0:rows,1:cols+1])/(dy**2)
+    v2_x=(v[1:rows+1,2:]-2*v[1:rows+1,1:cols+1]+v[1:rows+1,0:cols])/(dx**2)
+    u_face=(u[1:rows+1,1:cols+1]+u[1:rows+1,2:]+u[0:rows,1:cols+1]+u[0:rows,2:])/4
+    v_star[1:rows+1,1:cols+1]=v[1:rows+1,1:cols+1]-dt*(u_face*v1_x+v[1:rows+1,1:cols+1]*v1_y)+(dt*(mu/rho)*(v2_x+v2_y))
+    
+    space.u_star=u_star.copy()
+    space.v_star=v_star.copy()    
+    
+    
+@nb.jit    
+def SolvePressurePoisson(space,fluid,left,right,top,bottom):
+    rows=int(space.rowpts)
+    cols=int(space.colpts)
+    u_star=space.u_star.astype(float)
+    v_star=space.v_star.astype(float)
     p=space.p.astype(float,copy=False)
     dx=float(space.dx)
     dy=float(space.dy)
@@ -150,12 +186,14 @@ def SolvePressurePoisson(space,fluid,left,right,top,bottom):
         i+=1
         p_old=p.astype(float,copy=True)
         
-        term_1=(1/dt)*(((v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy))+((u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx)))
-        term_2=((u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx))**2
-        term_3=((v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy))**2
-        term_4=2*((u[2:,1:cols+1]-u[0:rows,1:cols+1])/(2*dy))*((v[1:rows+1,2:]-v[1:rows+1,0:cols])/(2*dx))
-        term_5=(p_old[2:,1:cols+1]+p_old[0:rows,1:cols+1])/dy**2+(p_old[1:rows+1,2:]+p_old[1:rows+1,0:cols])/dx**2
-        p[1:rows+1,1:cols+1]=factor*term_5-(factor*rho)*(term_1-term_2-term_3-term_4)
+#        term_1=(1/dt)*(((v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy))+((u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx)))
+#        term_2=((u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx))**2
+#        term_3=((v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy))**2
+#        term_4=2*((u[2:,1:cols+1]-u[0:rows,1:cols+1])/(2*dy))*((v[1:rows+1,2:]-v[1:rows+1,0:cols])/(2*dx))
+        p2_xy=(p_old[2:,1:cols+1]+p_old[0:rows,1:cols+1])/dy**2+(p_old[1:rows+1,2:]+p_old[1:rows+1,0:cols])/dx**2
+        ustar1_x=(u_star[1:rows+1,2:]-u_star[1:rows+1,0:cols])/(2*dx)
+        vstar1_y=(v_star[2:,1:cols+1]-v_star[0:rows,1:cols+1])/(2*dy)
+        p[1:rows+1,1:cols+1]=(p2_xy)*factor-(rho*factor/dt)*(ustar1_x+vstar1_y)
         error=sci.amax(abs(p-p_old))
         #Apply Boundary Conditions
         SetPBoundary(space,left,right,top,bottom)
@@ -168,32 +206,21 @@ def SolvePressurePoisson(space,fluid,left,right,top,bottom):
 def SolveMomentumEquation(space,fluid):
     rows=int(space.rowpts)
     cols=int(space.colpts)
-    u=space.u.astype(float,copy=False)
-    v=space.v.astype(float,copy=False)
+    u_star=space.u_star.astype(float)
+    v_star=space.v_star.astype(float)
     p=space.p.astype(float)
     dx=float(space.dx)
     dy=float(space.dy)
     dt=float(space.dt)
     rho=float(fluid.rho)
-    mu=float(fluid.mu)
     u_next=space.u_next.astype(float,copy=False)
     v_next=space.v_next.astype(float,copy=False)
 
-    u1_y=(u[2:,1:cols+1]-u[0:rows,1:cols+1])/(2*dy)
-    u1_x=(u[1:rows+1,2:]-u[1:rows+1,0:cols])/(2*dx)
     p1_x=(p[1:rows+1,2:]-p[1:rows+1,0:cols])/(2*dx)
-    u2_y=(u[2:,1:cols+1]-2*u[1:rows+1,1:cols+1]+u[0:rows,1:cols+1])/(dy**2)
-    u2_x=(u[1:rows+1,2:]-2*u[1:rows+1,1:cols+1]+u[1:rows+1,0:cols])/(dx**2)
-    v_face=(v[1:rows+1,1:cols+1]+v[1:rows+1,0:cols]+v[2:,1:cols+1]+v[2:,0:cols])/4
-    u_next[1:rows+1,1:cols+1]=u[1:rows+1,1:cols+1]-dt*(u[1:rows+1,1:cols+1]*u1_x+v_face*u1_y)-(dt/rho)*p1_x+(dt*(mu/rho)*(u2_x+u2_y))   
+    u_next[1:rows+1,1:cols+1]=u_star[1:rows+1,1:cols+1]-(dt/rho)*p1_x
 
-    v1_y=(v[2:,1:cols+1]-v[0:rows,1:cols+1])/(2*dy)
-    v1_x=(v[1:rows+1,2:]-v[1:rows+1,0:cols])/(2*dx)
     p1_y=(p[2:,1:cols+1]-p[0:rows,1:cols+1])/(2*dy)
-    v2_y=(v[2:,1:cols+1]-2*v[1:rows+1,1:cols+1]+v[0:rows,1:cols+1])/(dy**2)
-    v2_x=(v[1:rows+1,2:]-2*v[1:rows+1,1:cols+1]+v[1:rows+1,0:cols])/(dx**2)
-    u_face=(u[1:rows+1,1:cols+1]+u[1:rows+1,2:]+u[0:rows,1:cols+1]+u[0:rows,2:])/4
-    v_next[1:rows+1,1:cols+1]=v[1:rows+1,1:cols+1]-dt*(u_face*v1_x+v[1:rows+1,1:cols+1]*v1_y)-(dt/rho)*p1_y+(dt*(mu/rho)*(v2_x+v2_y))
+    v_next[1:rows+1,1:cols+1]=v_star[1:rows+1,1:cols+1]-(dt/rho)*p1_y
             
 def AdjustUV(space):
     space.u[1:-1,1:-1]=space.u_next[1:-1,1:-1].copy()

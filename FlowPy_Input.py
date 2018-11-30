@@ -21,6 +21,7 @@ time=100
 ###############################MISC############################################
 CFL_number=0.9 #Do not touch this unless solution diverges
 file_flag=0 #Keep 1 to print results to file
+interval=2 #Record values in file per interval number of iterations
 plot_flag=1 #Keep 1 to plot results at the end
 ###########################DEFINE PHYSICAL PARAMETERS##########################
 rho=1
@@ -58,6 +59,7 @@ while(t<time):
     SetTimeStep(CFL,cavity,water)
     timestep=cavity.dt
     
+    GetStarredVelocities(cavity,water)
     SetUBoundary(cavity,noslip,noslip,flow,noslip)
     SetVBoundary(cavity,noslip,noslip,noslip,noslip)
     SetPBoundary(cavity,zeroflux,zeroflux,pressureatm,zeroflux)
