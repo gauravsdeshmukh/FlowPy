@@ -5,9 +5,10 @@ Created on Fri Jul 27 19:25:12 2018
 @author: Gaurav
 """
 
-import scipy as sci
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import sys
 from FlowPy import *
 
 ###############################################################################
@@ -15,13 +16,13 @@ from FlowPy import *
 ############################DEFINE SPATIAL AND TEMPORAL PARAMETERS#############
 length=4
 breadth=4
-colpts=129
-rowpts=129
-time=100
+colpts=257
+rowpts=257
+time=150
 ###############################MISC############################################
-CFL_number=0.9 #Do not touch this unless solution diverges
-file_flag=0 #Keep 1 to print results to file
-interval=2 #Record values in file per interval number of iterations
+CFL_number=0.8 #Do not touch this unless solution diverges
+file_flag=1 #Keep 1 to print results to file
+interval=100 #Record values in file per interval number of iterations
 plot_flag=1 #Keep 1 to plot results at the end
 ###########################DEFINE PHYSICAL PARAMETERS##########################
 rho=1
@@ -54,34 +55,46 @@ pressureatm=Boundary("D",p_out)
 t=0
 i=0
 ############################THE RUN############################################
+print("######## Beginning FlowPy Simulation ########")
+print("#############################################")
+print("# Simulation time: {0:.2f}".format(time))
+print("# Mesh: {0} x {1}".format(colpts,rowpts))
+print("# Re/u: {0:.2f}\tRe/v:{1:.2f}".format(rho*length/mu,rho*breadth/mu))
+print("# Save outputs to text file: {0}".format(bool(file_flag)))
+MakeResultDirectory(wipe=True)
+
 while(t<time):
+    sys.stdout.write("\rSimulation time left: {0:.2f}".format(time-t))
+    sys.stdout.flush()
+
     CFL=CFL_number
     SetTimeStep(CFL,cavity,water)
     timestep=cavity.dt
     
-    GetStarredVelocities(cavity,water)
+    
     SetUBoundary(cavity,noslip,noslip,flow,noslip)
     SetVBoundary(cavity,noslip,noslip,noslip,noslip)
     SetPBoundary(cavity,zeroflux,zeroflux,pressureatm,zeroflux)
+    GetStarredVelocities(cavity,water)
+    
     
     SolvePressurePoisson(cavity,water,zeroflux,zeroflux,pressureatm,zeroflux)
     SolveMomentumEquation(cavity,water)
-    AdjustUV(cavity)
     
     SetCentrePUV(cavity)
     if(file_flag==1):
-        WriteToFile(cavity,i)
+        WriteToFile(cavity,i,interval)
 
     t+=timestep
     i+=1
-    print(time-t)
+    
 
 ###########################END OF RUN##########################################
 ###############################################################################
 #######################SET ARRAYS FOR PLOTTING#################################
-x=sci.linspace(0,length,colpts)
-y=sci.linspace(0,breadth,rowpts)
-[X,Y]=sci.meshgrid(x,y)
+x=np.linspace(0,length,colpts)
+y=np.linspace(0,breadth,rowpts)
+[X,Y]=np.meshgrid(x,y)
 
 u=cavity.u
 v=cavity.v
@@ -102,18 +115,25 @@ x_g=[length*x_g[i] for i in range(len(x_g))]
 
 ######################EXTRA PLOTTING CODE BELOW################################
 if(plot_flag==1):
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(20,20))
     plt.contourf(X,Y,p_c,cmap=cm.viridis)
     plt.colorbar()
     plt.quiver(X,Y,u_c,v_c)
     plt.title("Velocity and Pressure Plot")
     
-    plt.figure(figsize=(10,10))
-    plt.plot(y,u_c[:,int(sci.ceil(colpts/2))],"darkblue")
+    plt.figure(figsize=(20,20))
+    plt.plot(y,u_c[:,int(np.ceil(colpts/2))],"darkblue")
     plt.plot(y_g,u_g,"rx")
+    plt.xlabel("Vertical distance along center")
+    plt.ylabel("Horizontal velocity")
+    plt.title("Benchmark plot 1")
     
-    plt.figure(figsize=(10,10))
-    plt.plot(x,v_c[int(sci.ceil(rowpts/2)),:],"darkblue")
+    plt.figure(figsize=(20,20))
+    plt.plot(x,v_c[int(np.ceil(rowpts/2)),:],"darkblue")
     plt.plot(x_g,v_g,"rx")
+    plt.xlabel("Horizontal distance along center")
+    plt.ylabel("Vertical velocity")
+    plt.title("Benchmark plot 2")
+    plt.show()
     
 #########################END OF FILE###########################################
